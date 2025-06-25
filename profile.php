@@ -81,6 +81,12 @@ $following_count = $stmt->fetchColumn();
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
 </head>
 <body>
+    <!-- Tombol kembali di kanan atas -->
+    <nav class="navbar navbar-light bg-light mb-4">
+        <div class="container-fluid justify-content-end">
+            <a href="timeline.php" class="btn btn-outline-primary">Kembali</a>
+        </div>
+    </nav>
     <div class="container mt-4">
         <?php if(isset($success)) echo "<p class='text-success'>$success</p>"; ?>
         <?php if(isset($error)) echo "<p class='text-danger'>$error</p>"; ?>
@@ -157,9 +163,79 @@ $following_count = $stmt->fetchColumn();
                         </div>
                         <?php endwhile; ?>
                     </div>
+                    <?php if($profile_user_id == $_SESSION['user']['id']): ?>
+    <form method="post" class="mt-3 text-start" style="max-width:400px;margin:auto;">
+        <div class="mb-2">
+            <label class="form-label">Bio</label>
+            <textarea name="bio" class="form-control" rows="2"><?php echo htmlspecialchars($profile_user['bio'] ?? ''); ?></textarea>
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Tanggal Lahir</label>
+            <div class="row g-1">
+                <div class="col">
+                    <select name="birth_day" class="form-select">
+                        <option value="">Hari</option>
+                        <?php for($d=1;$d<=31;$d++): ?>
+                            <option value="<?php echo $d; ?>" <?php if(isset($profile_user['birthdate']) && date('j',strtotime($profile_user['birthdate']))==$d) echo 'selected'; ?>><?php echo $d; ?></option>
+                        <?php endfor; ?>
+                    </select>
+                </div>
+                <div class="col">
+                    <select name="birth_month" class="form-select">
+                        <option value="">Bulan</option>
+                        <?php for($m=1;$m<=12;$m++): ?>
+                            <option value="<?php echo $m; ?>" <?php if(isset($profile_user['birthdate']) && date('n',strtotime($profile_user['birthdate']))==$m) echo 'selected'; ?>><?php echo date('F', mktime(0,0,0,$m,1)); ?></option>
+                        <?php endfor; ?>
+                    </select>
+                </div>
+                <div class="col">
+                    <select name="birth_year" class="form-select">
+                        <option value="">Tahun</option>
+                        <?php for($y=date('Y');$y>=1950;$y--): ?>
+                            <option value="<?php echo $y; ?>" <?php if(isset($profile_user['birthdate']) && date('Y',strtotime($profile_user['birthdate']))==$y) echo 'selected'; ?>><?php echo $y; ?></option>
+                        <?php endfor; ?>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Bekerja di</label>
+            <input type="text" name="work" class="form-control" value="<?php echo htmlspecialchars($profile_user['work'] ?? ''); ?>">
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Alamat</label>
+            <input type="text" name="address" class="form-control" value="<?php echo htmlspecialchars($profile_user['address'] ?? ''); ?>">
+        </div>
+        <button type="submit" name="update_profile" class="btn btn-success btn-sm">Simpan Profil</button>
+    </form>
+<?php endif; ?>
                 <?php endif; ?>
             </div>
         </div>
     </div>
 </body>
 </html>
+
+<?php
+if (isset($_POST['update_profile'])) {
+    $bio = $_POST['bio'] ?? '';
+    $work = $_POST['work'] ?? '';
+    $address = $_POST['address'] ?? '';
+
+    // Gabungkan tanggal lahir
+    $birth_day = $_POST['birth_day'] ?? '';
+    $birth_month = $_POST['birth_month'] ?? '';
+    $birth_year = $_POST['birth_year'] ?? '';
+
+    $birthdate = null;
+    if ($birth_day && $birth_month && $birth_year) {
+        $birthdate = sprintf('%04d-%02d-%02d', $birth_year, $birth_month, $birth_day);
+    }
+
+    $stmt = $db->prepare("UPDATE users SET bio = ?, birthdate = ?, work = ?, address = ? WHERE id = ?");
+    $stmt->execute([$bio, $birthdate, $work, $address, $_SESSION['user']['id']]);
+
+    header("Location: " . $_SERVER['REQUEST_URI']);
+    exit;
+}
+?>

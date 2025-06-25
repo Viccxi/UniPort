@@ -1,0 +1,208 @@
+body {
+    background: #fff;
+    color: #222;
+    font-family: 'Segoe UI', Arial, sans-serif;
+}
+.uniport-brand {
+    font-size: 2.1rem;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+    color: #097bd4;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    vertical-align: middle;
+    transition: font-size 0.2s;
+}
+.navbar {
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
+    background: #fff !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+.hero-section {
+    min-height: 70vh;
+    display: flex;
+    align-items: center;
+    background: linear-gradient(135deg, #fff 80%, #e3f7fa 100%);
+    padding: 2rem 0 1rem 0;
+}
+.hero-title {
+    font-weight: 900;
+    font-size: 2.1rem;
+    letter-spacing: 1px;
+    color: #222;
+    transition: font-size 0.2s;
+}
+.hero-desc {
+    color: #3a3a3a;
+    font-size: 1.08rem;
+    margin-bottom: 1.2rem;
+}
+.cta-btn-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.cta-btn-group .btn {
+    border-radius: 32px;
+    font-weight: 600;
+    font-size: 1.04rem;
+    padding: 0.65rem 1.7rem;
+    box-shadow: 0 3px 20px rgba(20,185,255,0.08);
+    transition: transform 0.13s;
+}
+.btn-uniport-primary {
+    background: linear-gradient(90deg,#38b6ff 60%,#00cba9 100%);
+    border: none;
+    color: #fff;
+}
+.btn-uniport-primary:hover, .btn-outline-uniport:hover {
+    transform: scale(1.045);
+    box-shadow: 0 8px 32px rgba(56,182,255,0.12);
+}
+.btn-outline-uniport {
+    background: #fff;
+    border: 2px solid #38b6ff;
+    color: #38b6ff;
+}
+.btn-outline-uniport:active, .btn-outline-uniport:focus {
+    background: #e3f7fa;
+    color: #00cba9;
+    border-color: #00cba9;
+}
+.showcase-section {
+    padding: 2rem 0;
+}
+.portfolio-card {
+    border-radius: 1.5rem;
+    border: none;
+    box-shadow: 0 8px 32px rgba(80, 195, 235, 0.08);
+    padding: 2rem 1.2rem;
+    background: #f7faff;
+    transition: transform 0.2s;
+}
+.portfolio-card:hover {
+    transform: translateY(-5px) scale(1.025);
+    box-shadow: 0 16px 36px rgba(80, 195, 235, 0.13);
+}
+.avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 16px rgba(180, 235, 255, 0.12);
+}
+.testimonial-section {
+    background: #f6f8fa;
+    padding: 2rem 0;
+}
+.testimonial-card {
+    border: none;
+    border-radius: 1.5rem;
+    background: #fff;
+    box-shadow: 0 2px 14px rgba(20,100,160,0.04);
+    padding: 1.2rem 1rem;
+}
+.footer {
+    border-top: 1px solid #f1f1f1;
+    text-align: center;
+    padding: 2rem 0 0.5rem;
+    color: #999;
+    background: #fff;
+    margin-top: 2rem;
+}
+
+/* =========== RESPONSIVE ============= */
+@media (max-width: 991px) {
+    .hero-section {
+        min-height: 50vh;
+        padding: 1.5rem 0 0.5rem 0;
+    }
+    .hero-title {
+        font-size: 1.8rem;
+    }
+    .hero-desc {
+        font-size: 1rem;
+    }
+    .showcase-section, .testimonial-section {
+        padding: 1.2rem 0;
+    }
+}
+
+@media (max-width: 767px) {
+    .hero-section {
+        min-height: unset;
+        padding: 1.2rem 0 0.2rem 0;
+    }
+    .hero-title {
+        font-size: 1.5rem;
+    }
+    .hero-desc {
+        font-size: 0.98rem;
+    }
+    .btn-cta {
+        font-size: 0.95rem;
+        padding: 0.55rem 1.2rem;
+        width: 100%;
+        margin-bottom: 8px;
+    }
+    .portfolio-card {
+        padding: 1.4rem 0.7rem;
+    }
+    .avatar {
+        width: 46px;
+        height: 46px;
+    }
+    .testimonial-card {
+        padding: 0.95rem 0.6rem;
+    }
+    .col-lg-7, .col-lg-5 {
+        text-align: center !important;
+    }
+    .hero-section .d-flex {
+        flex-direction: column;
+        align-items: center;
+    }
+    .hero-section img[alt="Logo UniPort"] {
+        margin-bottom: 10px;
+        margin-right: 0 !important;
+    }
+    .hero-section .btn-cta {
+        margin-bottom: 0.4rem;
+    }
+    .uniport-brand {
+        font-size: 1.5rem;
+    }
+    .hero-title {
+        font-size: 1.25rem;
+    }
+    .cta-btn-group {
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+    }
+    .cta-btn-group .btn {
+        width: 100%;
+        margin-right: 0 !important;
+        margin-bottom: 0.7rem;
+        font-size: 1.02rem;
+    }
+    .navbar img[alt="Logo UniPort"] {
+        height: 46px !important;
+        margin-right: 10px;
+    }
+}
+
+@media (max-width: 575px) {
+    .hero-section {
+        padding-top: 0.5rem;
+        padding-bottom: 0.2rem;
+    }
+    .showcase-section, .testimonial-section {
+        padding: 0.6rem 0;
+    }
+    .footer {
+        padding: 1.2rem 0 0.3rem;
+        font-size: 0.9rem;
+    }
+}

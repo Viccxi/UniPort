@@ -81,6 +81,35 @@ if(isset($_POST['create_comment'])) {
     }
 }
 
+// Handle update comment
+if(isset($_POST['update_comment'])) {
+    $comment_id = $_POST['edit_comment_id'];
+    $content = $_POST['edit_comment_content'];
+    $user_id = $_SESSION['user']['id'];
+    try {
+        $stmt = $db->prepare("UPDATE comments SET content = ?, edited_at = NOW() WHERE id = ? AND user_id = ?");
+        $stmt->execute([$content, $comment_id, $user_id]);
+        header("Location: " . $_SERVER['REQUEST_URI']);
+        exit;
+    } catch(PDOException $e) {
+        die("Error: " . $e->getMessage());
+    }
+}
+
+// Handle delete comment
+if(isset($_GET['delete_comment'])) {
+    $comment_id = $_GET['delete_comment'];
+    $user_id = $_SESSION['user']['id'];
+    try {
+        $stmt = $db->prepare("DELETE FROM comments WHERE id = ? AND user_id = ?");
+        $stmt->execute([$comment_id, $user_id]);
+        header("Location: " . strtok($_SERVER["REQUEST_URI"], '?'));
+        exit;
+    } catch(PDOException $e) {
+        die("Error: " . $e->getMessage());
+    }
+}
+
 // Get all posts
 try {
     $stmt = $db->prepare("
@@ -109,6 +138,29 @@ foreach ($posts as $p) {
     $stmt->execute([$p['id']]);
     $post_like_counts[$p['id']] = $stmt->fetchColumn();
 }
+
+$user_like_status = [];
+if (isset($_SESSION['user']['id'])) {
+    $user_id = $_SESSION['user']['id'];
+    $stmt = $db->prepare("SELECT post_id FROM likes WHERE user_id = ?");
+    $stmt->execute([$user_id]);
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $liked_post_id) {
+        $user_like_status[$liked_post_id] = true;
+    }
+}
+
+// Ambil teman (saling follow/accepted)
+$stmt = $db->prepare("
+    SELECT u.id, u.name, u.photo
+    FROM users u
+    JOIN followers f1 ON f1.follower_id = u.id AND f1.user_id = ? AND f1.status = 'accepted'
+    JOIN followers f2 ON f2.user_id = u.id AND f2.follower_id = ? AND f2.status = 'accepted'
+    WHERE u.id != ?
+    GROUP BY u.id
+    LIMIT 5
+");
+$stmt->execute([$_SESSION['user']['id'], $_SESSION['user']['id'], $_SESSION['user']['id']]);
+$friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 
@@ -175,9 +227,49 @@ foreach ($posts as $p) {
         .comment-photo-preview img {
             animation: popIn 0.5s;
         }
+        #imgZoomModal .modal-dialog {
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0 auto;
+        }
+
         #imgZoomModal .modal-content {
             background: rgba(0,0,0,0.7);
             box-shadow: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #imgZoomModal .modal-body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+
+        #zoomedImg {
+            display: block;
+            margin: 0 auto;
+            max-width: 90vw;
+            max-height: 80vh;
+            box-shadow: 0 0 20px #000;
+            border-radius: 12px;
+        }
+        .post-image-wrapper {
+            background: #f5f5f5;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        }
+        .post-img-overlay {
+            font-size: 1rem;
+            letter-spacing: 0.5px;
+        }
+        .d-flex.align-items-start > a,
+        .d-flex.align-items-start > .flex-grow-1 {
+            align-self: flex-start;
         }
     </style>
 </head>
@@ -185,8 +277,9 @@ foreach ($posts as $p) {
     <!-- Navigation Bar -->
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm mb-4">
         <div class="container">
-            <a class="navbar-brand" href="#">
-                <i class="fas fa-users me-2"></i>Pesbuk
+            <a class="navbar-brand d-flex align-items-center" href="#">
+                <img src="assets/logouniport.png" alt="Logo Uniport" style="height:38px; margin-right:10px;">
+                <span style="font-weight:700; font-size:1.8rem; color:#70757B;">Uniport</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -194,7 +287,9 @@ foreach ($posts as $p) {
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link active" href="#"><i class="fas fa-home me-1"></i> Home</a>
+                        <a class="nav-link <?php echo (basename($_SERVER['PHP_SELF'])=='timeline.php') ? 'active text-danger fw-bold' : ''; ?>" href="timeline.php">
+                            <i class="fas fa-home me-1"></i> Home
+                        </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#"><i class="fas fa-bell me-1"></i> Notifications</a>
@@ -218,8 +313,8 @@ foreach ($posts as $p) {
                     <div class="card-body text-center">
                         <?php
                         $photo_path = "img/" . $_SESSION['user']['photo'];
-                        if(!file_exists($photo_path) || empty($_SESSION['user']['photo'])) {
-                            $photo_path = "img/default.png";
+                        if(empty($_SESSION['user']['photo']) || !file_exists($photo_path)) {
+                            $photo_path = "img/default.svg";
                         }
                         ?>
                         <img class="img-fluid rounded-circle mb-3 border border-3 border-primary"
@@ -249,18 +344,25 @@ foreach ($posts as $p) {
                 </div>
                 <!-- Friends List -->
                 <div class="card mb-4">
-                    <div class="card-header bg-white">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Friends</h5>
+                        <?php if(count($friends) == 5): ?>
+                            <a href="friends.php" class="btn btn-link btn-sm">See More</a>
+                        <?php endif; ?>
                     </div>
                     <div class="card-body">
                         <div class="row g-2">
-                            <?php for($i=1; $i<=6; $i++): ?>
-                            <div class="col-4">
-                                <img src="https://randomuser.me/api/portraits/<?php echo $i%2==0?'women':'men'; ?>/<?php echo $i; ?>.jpg" 
-                                     class="img-fluid rounded-circle border" 
-                                     alt="Friend <?php echo $i; ?>">
+                            <?php foreach(array_slice($friends, 0, 4) as $f): ?>
+                            <div class="col-3 text-center">
+                                <?php
+                                $friend_photo = (!empty($f['photo']) && file_exists("img/".$f['photo'])) ? "img/".$f['photo'] : "img/default.svg";
+                                ?>
+                                <a href="profilevisit.php?id=<?php echo $f['id']; ?>" class="text-decoration-none">
+                                    <img src="<?php echo $friend_photo; ?>" class="img-fluid rounded-circle border mb-1" style="width:48px;height:48px;object-fit:cover;">
+                                    <div style="font-size:0.85em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?php echo htmlspecialchars($f['name']); ?></div>
+                                </a>
                             </div>
-                            <?php endfor; ?>
+                            <?php endforeach; ?>
                         </div>
                     </div>
                 </div>
@@ -272,10 +374,16 @@ foreach ($posts as $p) {
                     <div class="card-body">
                         <form action="" method="post" enctype="multipart/form-data">
                             <div class="d-flex mb-3">
+                                <?php
+                                $mini_photo_path = "img/" . $_SESSION['user']['photo'];
+                                if(empty($_SESSION['user']['photo']) || !file_exists($mini_photo_path)) {
+                                    $mini_photo_path = "img/default.svg";
+                                }
+                                ?>
                                 <img class="rounded-circle me-2" 
-                                     src="img/<?php echo $_SESSION['user']['photo'] ?>" 
-                                     width="40" 
-                                     alt="<?php echo $_SESSION['user']['name'] ?>">
+                                    src="<?php echo $mini_photo_path ?>" 
+                                    width="32" 
+                                    alt="<?php echo $_SESSION['user']['name'] ?>">
                                 <input type="text" 
                                        class="form-control rounded-pill" 
                                        id="postContent"
@@ -309,15 +417,19 @@ foreach ($posts as $p) {
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <div class="d-flex align-items-center">
                                 <?php
-                                $user_photo = !empty($post['user_photo']) ? "img/" . $post['user_photo'] : "img/default.png";
-                                if(!file_exists($user_photo)) $user_photo = "img/default.png";
+                                $user_photo = (!empty($post['user_photo']) && file_exists("img/" . $post['user_photo'])) ? "img/" . $post['user_photo'] : "img/default.svg";
+                                if(!file_exists($user_photo)) $user_photo = "img/default.svg";
                                 ?>
-                                <img class="rounded-circle me-2" 
-                                     src="<?php echo $user_photo ?>" 
-                                     width="40" 
-                                     alt="<?php echo htmlspecialchars($post['name']) ?>">
+                                <a href="profilevisit.php?id=<?php echo $post['user_id']; ?>">
+                                    <img class="rounded-circle me-2"
+                                         src="<?php echo $user_photo ?>"
+                                         width="40"
+                                         alt="<?php echo htmlspecialchars($post['name']) ?>">
+                                </a>
                                 <div>
-                                    <h6 class="mb-0"><?php echo $post['name'] ?></h6>
+                                    <a href="profilevisit.php?id=<?php echo $post['user_id']; ?>" class="text-decoration-none text-dark">
+                                        <h6 class="mb-0"><?php echo $post['name'] ?></h6>
+                                    </a>
                                     <small class="text-muted"><?php echo date('F j, Y \a\t g:i a', strtotime($post['created_at'])) ?></small>
                                 </div>
                             </div>
@@ -355,20 +467,32 @@ foreach ($posts as $p) {
                         if (!empty($post['photo']) && $post['photo'] !== 'default.svg') {
                             $photo_path = "img/posts/" . $post['photo'];
                             if (file_exists($photo_path)) {
-                                echo '<img src="' . $photo_path . '" class="img-fluid rounded mb-2" style="max-width:300px;">';
+                                echo '
+                                <div class="d-flex justify-content-center mb-2">
+                                    <div class="post-image-wrapper position-relative" style="max-width:350px;max-height:450px;overflow:hidden;">
+                                        <img src="' . $photo_path . '" 
+                                             class="img-fluid rounded post-img-zoom" 
+                                             style="object-fit:contain; width:100%; height:auto; max-height:450px; cursor:pointer; background:#f5f5f5;" 
+                                             alt="Post Image"
+                                             data-post-id="' . $post['id'] . '">
+                                        <div class="post-img-overlay d-flex justify-content-between align-items-center px-3 py-1"
+                                             style="position:absolute;bottom:0;left:0;width:100%;background:rgba(0,0,0,0.45);color:#fff;border-radius:0 0 12px 12px;">
+                                            <span><i class="fas fa-thumbs-up me-1"></i> <span class="like-count">' . ($post_like_counts[$post['id']] ?? 0) . '</span></span>
+                                            <span><i class="fas fa-comment me-1"></i> <span class="comment-count">' . ($post_comment_counts[$post['id']] ?? 0) . '</span></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                ';
                             }
                         }
                         ?>
                         <!-- Post Actions -->
-                        <div class="d-flex justify-content-between border-top border-bottom py-2 mb-3">
-                            <button class="btn btn-sm btn-outline-secondary like-btn">
-                                <i class="fas fa-thumbs-up me-1"></i> Like (<?php echo $post_like_counts[$post['id']] ?? 0; ?>)
+                        <div class="d-flex border-top border-bottom py-2 mb-3 justify-content-center gap-2">
+                            <button class="btn btn-sm <?php echo !empty($user_like_status[$post['id']]) ? 'btn-danger' : 'btn-outline-secondary'; ?> like-btn" data-post-id="<?php echo $post['id']; ?>">
+                                <i class="fas fa-thumbs-up me-1"></i> <?php echo !empty($user_like_status[$post['id']]) ? 'Liked' : 'Like'; ?> (<?php echo $post_like_counts[$post['id']] ?? 0; ?>)
                             </button>
                             <button class="btn btn-sm btn-outline-secondary comment-btn">
                                 <i class="fas fa-comment me-1"></i> Comment (<?php echo $post_comment_counts[$post['id']] ?? 0; ?>)
-                            </button>
-                            <button class="btn btn-sm btn-outline-secondary">
-                                <i class="fas fa-share me-1"></i> Share
                             </button>
                         </div>
                         <!-- Comments Section -->
@@ -400,28 +524,78 @@ foreach ($posts as $p) {
                             </form>
                             <!-- Daftar komentar -->
                             <?php foreach($comments as $comment): ?>
-                            <div class="d-flex mb-2">
-                                <img class="rounded-circle me-2" 
-                                     src="img/<?php echo !empty($comment['photo_user']) ? $comment['photo_user'] : 'default.png'; ?>" 
-                                     width="32" 
-                                     alt="<?php echo $comment['name'] ?>">
-                                <div class="bg-light p-2 rounded flex-grow-1">
-                                    <strong><?php echo $comment['name']; ?></strong>
-                                    <p class="mb-1">
-                                        <?php echo nl2br(htmlspecialchars($comment['content'])); ?>
-                                    </p>
-                                    <?php if(!empty($comment['photo'])): ?>
-                                    <?php
-                                    $comment_photo_path = "img/comments/" . $comment['photo'];
-                                    if (file_exists($comment_photo_path)) {
-                                        echo '<img src="' . $comment_photo_path . '" class="img-thumbnail shadow comment-img" style="max-width:120px;max-height:120px;cursor:pointer;">';
-                                        echo '<br>';
-                                    }
-                                    ?>
-                                    <?php endif; ?>
-                                    <small class="text-muted d-block mt-1"><?php echo date('F j, Y \a\t g:i a', strtotime($comment['created_at'])); ?></small>
+                               <?php
+                                $comment_user_photo = (!empty($comment['photo_user']) && file_exists("img/" . $comment['photo_user'])) ? "img/" . $comment['photo_user'] : "img/default.svg";
+                                ?>
+                                <div class="d-flex mb-2 align-items-start">
+                                    <a href="profilevisit.php?id=<?php echo $comment['user_id']; ?>">
+                                        <img class="rounded-circle me-2"
+                                             src="<?php echo $comment_user_photo ?>"
+                                             width="32"
+                                             alt="<?php echo $comment['name'] ?>">
+                                    </a>
+                                    <div class="flex-grow-1">
+                                        <div>
+                                            <strong>
+                                                <a href="profilevisit.php?id=<?php echo $comment['user_id']; ?>" class="text-decoration-none text-dark">
+                                                    <?php echo $comment['name']; ?>
+                                                </a>
+                                            </strong>
+                                        </div>
+                                        <div class="bg-light p-2 rounded position-relative mt-1">
+                                            <div class="comment-content" id="comment-content-<?php echo $comment['id']; ?>">
+                                                <p class="mb-1"><?php echo nl2br(htmlspecialchars($comment['content'])); ?></p>
+                                            </div>
+                                            <!-- Form edit inline, awalnya hidden -->
+                                            <form method="post" class="d-none mt-2" id="edit-form-<?php echo $comment['id']; ?>">
+                                                <input type="hidden" name="edit_comment_id" value="<?php echo $comment['id']; ?>">
+                                                <div class="input-group input-group-sm">
+                                                    <input type="text" name="edit_comment_content" class="form-control" value="<?php echo htmlspecialchars($comment['content']); ?>" required>
+                                                    <button type="submit" name="update_comment" class="btn btn-primary btn-sm">Simpan</button>
+                                                    <button type="button" class="btn btn-secondary btn-sm cancel-edit-btn" data-comment-id="<?php echo $comment['id']; ?>">Batal</button>
+                                                </div>
+                                            </form>
+                                            <?php if(!empty($comment['photo'])): ?>
+                                                <?php
+                                                $comment_photo_path = "img/comments/" . $comment['photo'];
+                                                if (file_exists($comment_photo_path)) {
+                                                    echo '<img src="' . $comment_photo_path . '" class="img-thumbnail shadow comment-img" style="max-width:120px;max-height:120px;cursor:pointer;"><br>';
+                                                }
+                                                ?>
+                                            <?php endif; ?>
+                                            <small class="text-muted d-block mt-1">
+                                                <?php 
+                                                    echo date('F j, Y \a\t H:i', strtotime($comment['created_at']));
+                                                    if (!empty($comment['edited_at'])) {
+                                                        echo ' <span class="text-primary">(edited at ' . date('H:i', strtotime($comment['edited_at'])) . ')</span>';
+                                                    }
+                                                ?>
+                                            </small>
+                                            <?php if($comment['user_id'] == $_SESSION['user']['id']): ?>
+                                                <div class="dropdown position-absolute top-0 end-0">
+                                                    <button class="btn btn-link btn-sm text-muted" type="button" data-bs-toggle="dropdown">
+                                                        <i class="fas fa-ellipsis-h"></i>
+                                                    </button>
+                                                    <ul class="dropdown-menu dropdown-menu-end">
+                                                        <li>
+                                                            <button class="dropdown-item edit-inline-btn" 
+                                                                    data-comment-id="<?php echo $comment['id']; ?>">
+                                                                <i class="fas fa-edit me-2"></i>Edit
+                                                            </button>
+                                                        </li>
+                                                        <li>
+                                                            <a class="dropdown-item text-danger" 
+                                                               href="?delete_comment=<?php echo $comment['id']; ?>"
+                                                               onclick="return confirm('Hapus komentar ini?')">
+                                                                <i class="fas fa-trash me-2"></i>Hapus
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
                             <?php endforeach; ?>
                         </div>
                     </div>
@@ -438,34 +612,65 @@ foreach ($posts as $p) {
                     <h5 class="modal-title">Edit Post</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form method="post">
-                    <div class="modal-body">
+                <div class="modal-body">
+                    <form method="post">
                         <input type="hidden" name="post_id" id="editPostId">
-                        <textarea class="form-control" name="content" id="editPostContent" rows="5"></textarea>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" name="update_post" class="btn btn-primary">Save Changes</button>
-                    </div>
-                </form>
+                        <div class="mb-3">
+                            <label for="editPostContent" class="form-label">Content</label>
+                            <textarea class="form-control" id="editPostContent" name="content" rows="3" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="photoInput" class="form-label">Upload Photo</label>
+                            <input type="file" name="photo" accept="image/*" id="photoInput" class="form-control">
+                            <div style="width:100%;text-align:center;">
+                                <img id="photoPreview" src="#" alt="Preview" style="display:none;max-width:100%;max-height:350px;margin-top:10px;border-radius:10px;">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" name="update_post" class="btn btn-primary">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
-    <!-- Image Zoom Modal -->
+    <!-- Edit Comment Modal -->
+    <div class="modal fade" id="editCommentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="post" class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Komentar</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="edit_comment_id" id="editCommentId">
+                <textarea class="form-control" name="edit_comment_content" id="editCommentContent" rows="3" required></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-primary">Simpan Perubahan</button>
+            </div>
+        </form>
+    </div>
+</div>
+    <!-- Modal Zoom Gambar -->
     <div class="modal fade" id="imgZoomModal" tabindex="-1">
       <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content bg-transparent border-0">
           <div class="modal-body p-0 text-center">
             <img id="zoomedImg" src="" style="max-width:90vw;max-height:80vh;box-shadow:0 0 20px #000;border-radius:12px;">
+            <!-- Overlay info like & komen akan ditambahkan lewat JS -->
           </div>
         </div>
       </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+    document.addEventListener('DOMContentLoaded', function() {
         // Handle edit post modal
-        document.addEventListener('DOMContentLoaded', function() {
-            var editPostModal = document.getElementById('editPostModal');
+        var editPostModal = document.getElementById('editPostModal');
+        if (editPostModal) {
             editPostModal.addEventListener('show.bs.modal', function(event) {
                 var button = event.relatedTarget;
                 var postId = button.getAttribute('data-post-id');
@@ -473,31 +678,53 @@ foreach ($posts as $p) {
                 document.getElementById('editPostId').value = postId;
                 document.getElementById('editPostContent').value = content;
             });
-            // Like button functionality
-            document.querySelectorAll('.like-btn').forEach(button => {
-                button.addEventListener('click', function() {
-                    if(this.classList.contains('btn-outline-secondary')) {
-                        this.classList.remove('btn-outline-secondary');
-                        this.classList.add('btn-danger');
-                        this.innerHTML = '<i class="fas fa-thumbs-up me-1"></i> Liked (25)';
-                    } else {
-                        this.classList.remove('btn-danger');
-                        this.classList.add('btn-outline-secondary');
-                        this.innerHTML = '<i class="fas fa-thumbs-up me-1"></i> Like (24)';
+        }
+
+        // Like button functionality
+        document.querySelectorAll('.like-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const btn = this;
+                const postId = btn.getAttribute('data-post-id');
+                btn.disabled = true;
+
+                fetch('like.php', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'post_id=' + encodeURIComponent(postId)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    if (data && typeof data.like_count !== 'undefined') {
+                        if (data.status === 'liked') {
+                            btn.classList.remove('btn-outline-secondary');
+                            btn.classList.add('btn-danger');
+                            btn.innerHTML = '<i class="fas fa-thumbs-up me-1"></i> Liked (' + data.like_count + ')';
+                        } else {
+                            btn.classList.remove('btn-danger');
+                            btn.classList.add('btn-outline-secondary');
+                            btn.innerHTML = '<i class="fas fa-thumbs-up me-1"></i> Like (' + data.like_count + ')';
+                        }
                     }
+                })
+                .finally(() => {
+                    btn.disabled = false;
                 });
             });
         });
 
         // Preview foto post
-        document.getElementById('photoInput').addEventListener('change', function(e) {
-            const [file] = this.files;
-            if(file) {
-                const preview = document.getElementById('photoPreview');
-                preview.src = URL.createObjectURL(file);
-                preview.style.display = 'block';
-            }
-        });
+        var photoInput = document.getElementById('photoInput');
+        if (photoInput) {
+            photoInput.addEventListener('change', function(e) {
+                const [file] = this.files;
+                if(file) {
+                    const preview = document.getElementById('photoPreview');
+                    preview.src = URL.createObjectURL(file);
+                    preview.style.display = 'block';
+                }
+            });
+        }
 
         // Animasi upload gambar komentar
         document.querySelectorAll('.comment-photo-input').forEach(input => {
@@ -513,14 +740,75 @@ foreach ($posts as $p) {
                 }
             });
         });
+
         // Image zoom functionality
         document.querySelectorAll('.comment-img').forEach(img => {
-    img.addEventListener('click', function() {
-        document.getElementById('zoomedImg').src = this.src;
-        var modal = new bootstrap.Modal(document.getElementById('imgZoomModal'));
-        modal.show();
+            img.addEventListener('click', function() {
+                document.getElementById('zoomedImg').src = this.src;
+                var modal = new bootstrap.Modal(document.getElementById('imgZoomModal'));
+                modal.show();
+            });
+        });
+
+        // Image zoom functionality for post images
+        document.querySelectorAll('.post-img-zoom').forEach(img => {
+            img.addEventListener('click', function() {
+                // Ambil data
+                const src = this.src;
+                const postCard = this.closest('.post-card');
+                const likeCount = postCard.querySelector('.like-count')?.textContent || '0';
+                const commentCount = postCard.querySelector('.comment-count')?.textContent || '0';
+
+                // Set gambar dan overlay info di modal
+                const zoomedImg = document.getElementById('zoomedImg');
+                zoomedImg.src = src;
+
+                // Tambahkan info like & komen di bawah gambar pada modal
+                let overlay = document.getElementById('zoomedImgOverlay');
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'zoomedImgOverlay';
+                    overlay.style = 'margin-top:12px;display:flex;justify-content:center;gap:32px;font-size:1.2rem;';
+                    zoomedImg.parentNode.appendChild(overlay);
+                }
+                overlay.innerHTML = `
+                    <span><i class="fas fa-thumbs-up me-1"></i> <span class="like-count">${likeCount}</span></span>
+                    <span><i class="fas fa-comment me-1"></i> <span class="comment-count">${commentCount}</span></span>
+                `;
+
+                // Tampilkan modal
+                var modal = new bootstrap.Modal(document.getElementById('imgZoomModal'));
+                modal.show();
+            });
+        });
+
+        // Edit Comment Modal
+        document.querySelectorAll('.edit-comment-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.getElementById('editCommentId').value = this.getAttribute('data-comment-id');
+                document.getElementById('editCommentContent').value = this.getAttribute('data-comment-content');
+                var modal = new bootstrap.Modal(document.getElementById('editCommentModal'));
+                modal.show();
+            });
+        });
+
+        document.querySelectorAll('.edit-inline-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                var id = this.getAttribute('data-comment-id');
+                document.getElementById('comment-content-' + id).style.display = 'none';
+                document.getElementById('edit-form-' + id).classList.remove('d-none');
+                document.getElementById('edit-form-' + id).querySelector('input[name="edit_comment_content"]').focus();
+            });
+        });
+
+        document.querySelectorAll('.cancel-edit-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                var id = this.getAttribute('data-comment-id');
+                document.getElementById('edit-form-' + id).classList.add('d-none');
+                document.getElementById('comment-content-' + id).style.display = '';
+            });
+        });
     });
-});
     </script>
 </body>
 </html>
