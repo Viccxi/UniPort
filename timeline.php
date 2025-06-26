@@ -2,6 +2,13 @@
 require_once("auth.php");
 require_once("config.php");
 
+// Set default photo for users who have no photo
+try {
+    $db->exec("UPDATE users SET photo = 'default.svg' WHERE photo IS NULL OR photo = ''");
+} catch(PDOException $e) {
+    die("Error: " . $e->getMessage());
+}
+
 // Handle post creation
 if(isset($_POST['create_post'])) {
     $content = $_POST['content'];
@@ -196,11 +203,18 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .like-btn, .comment-btn {
             cursor: pointer;
         }
-        .like-btn:hover {
-            color: #dc3545 !important;
-        }
-        .comment-btn:hover {
+        .like-btn.btn-outline-secondary:hover,
+        .like-btn.btn-outline-secondary:focus {
             color: #0d6efd !important;
+            background: #e7f1ff !important;
+            border-color: #0d6efd !important;
+        }
+        .like-btn.btn-blue,
+        .like-btn.btn-blue:focus,
+        .like-btn.btn-blue:active {
+            background: #e7f1ff !important;
+            color: #0d6efd !important;
+            border-color: #0d6efd !important;
         }
         .rounded-circle {
             object-fit: cover;
@@ -271,6 +285,31 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .d-flex.align-items-start > .flex-grow-1 {
             align-self: flex-start;
         }
+        .comment-author {
+            font-weight: bold;
+            margin-bottom: 0;
+            font-size: 1em;
+            line-height: 1.1;
+        }
+        .comment-content {
+            margin-top: 0;
+            margin-bottom: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            line-height: 1.3;
+        }
+        .bg-light.p-2.rounded.position-relative.mt-1 {
+            margin-top: 2px !important;
+            padding-top: 6px !important;
+            padding-bottom: 6px !important;
+        }
+        .like-btn.btn-blue,
+        .like-btn.btn-blue:focus,
+        .like-btn.btn-blue:active {
+            background: #e7f1ff !important;
+            color: #0d6efd !important;
+            border-color: #0d6efd !important;
+        }
     </style>
 </head>
 <body>
@@ -279,12 +318,20 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <div class="container">
             <a class="navbar-brand d-flex align-items-center" href="#">
                 <img src="assets/logouniport.png" alt="Logo Uniport" style="height:38px; margin-right:10px;">
-                <span style="font-weight:700; font-size:1.8rem; color:#70757B;">Uniport</span>
+                <span style="font-weight:700; font-size:1.8rem; color:#70757B;">UniPort</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
+                <form class="mx-auto" style="width:320px;max-width:100%;" action="search.php" method="get" role="search">
+                    <div class="input-group">
+                        <input class="form-control form-control-sm text-center" type="search" name="q" placeholder="Search" aria-label="Search" style="min-width:0;">
+                        <button class="btn btn-outline-primary btn-sm" type="submit">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </form>
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
                         <a class="nav-link <?php echo (basename($_SERVER['PHP_SELF'])=='timeline.php') ? 'active text-danger fw-bold' : ''; ?>" href="timeline.php">
@@ -312,16 +359,17 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div class="card profile-card mb-4">
                     <div class="card-body text-center">
                         <?php
-                        $photo_path = "img/" . $_SESSION['user']['photo'];
-                        if(empty($_SESSION['user']['photo']) || !file_exists($photo_path)) {
-                            $photo_path = "img/default.svg";
-                        }
+                        $photo_path = (!empty($_SESSION['user']['photo']) && $_SESSION['user']['photo'] !== 'default.svg' && file_exists("img/uploads/" . $_SESSION['user']['photo']))
+                            ? "img/uploads/" . $_SESSION['user']['photo']
+                            : "img/default.svg";
                         ?>
-                        <img class="img-fluid rounded-circle mb-3 border border-3 border-primary"
-                             width="160"
-                             src="<?php echo $photo_path ?>"
-                             alt="<?php echo htmlspecialchars($_SESSION['user']['name']) ?>">
-                        <h3 class="mb-1"><?php echo $_SESSION["user"]["name"] ?></h3>
+                        <a href="profilevisit.php?id=<?php echo $_SESSION['user']['id']; ?>" class="text-decoration-none text-dark">
+                            <img class="img-fluid rounded-circle mb-3 border border-3 border-primary"
+                                 width="160"
+                                 src="<?php echo $photo_path ?>"
+                                 alt="<?php echo htmlspecialchars($_SESSION['user']['name']) ?>">
+                            <h3 class="mb-1"><?php echo $_SESSION["user"]["name"] ?></h3>
+                        </a>
                         <p class="text-muted mb-3"><?php echo $_SESSION["user"]["email"] ?></p>
                         <div class="d-flex justify-content-between mb-3">
                             <div>
@@ -351,11 +399,16 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php endif; ?>
                     </div>
                     <div class="card-body">
+                        <?php if (empty($friends)): ?>
+                            <div class="text-center text-muted py-3">Belum memiliki teman</div>
+                        <?php else: ?>
                         <div class="row g-2">
                             <?php foreach(array_slice($friends, 0, 4) as $f): ?>
                             <div class="col-3 text-center">
                                 <?php
-                                $friend_photo = (!empty($f['photo']) && file_exists("img/".$f['photo'])) ? "img/".$f['photo'] : "img/default.svg";
+                                $friend_photo = (!empty($f['photo']) && $f['photo'] !== 'default.svg' && file_exists("img/uploads/".$f['photo']))
+                                    ? "img/uploads/".$f['photo']
+                                    : "img/default.svg";
                                 ?>
                                 <a href="profilevisit.php?id=<?php echo $f['id']; ?>" class="text-decoration-none">
                                     <img src="<?php echo $friend_photo; ?>" class="img-fluid rounded-circle border mb-1" style="width:48px;height:48px;object-fit:cover;">
@@ -364,6 +417,7 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             </div>
                             <?php endforeach; ?>
                         </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -375,10 +429,9 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <form action="" method="post" enctype="multipart/form-data">
                             <div class="d-flex mb-3">
                                 <?php
-                                $mini_photo_path = "img/" . $_SESSION['user']['photo'];
-                                if(empty($_SESSION['user']['photo']) || !file_exists($mini_photo_path)) {
-                                    $mini_photo_path = "img/default.svg";
-                                }
+                                $mini_photo_path = (!empty($_SESSION['user']['photo']) && $_SESSION['user']['photo'] !== 'default.svg' && file_exists("img/uploads/" . $_SESSION['user']['photo']))
+                                    ? "img/uploads/" . $_SESSION['user']['photo']
+                                    : "img/default.svg";
                                 ?>
                                 <img class="rounded-circle me-2" 
                                     src="<?php echo $mini_photo_path ?>" 
@@ -417,7 +470,7 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <div class="d-flex align-items-center">
                                 <?php
-                                $user_photo = (!empty($post['user_photo']) && file_exists("img/" . $post['user_photo'])) ? "img/" . $post['user_photo'] : "img/default.svg";
+                                $user_photo = (!empty($post['user_photo']) && file_exists("img/uploads/" . $post['user_photo'])) ? "img/uploads/" . $post['user_photo'] : "img/default.svg";
                                 if(!file_exists($user_photo)) $user_photo = "img/default.svg";
                                 ?>
                                 <a href="profilevisit.php?id=<?php echo $post['user_id']; ?>">
@@ -488,7 +541,7 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         ?>
                         <!-- Post Actions -->
                         <div class="d-flex border-top border-bottom py-2 mb-3 justify-content-center gap-2">
-                            <button class="btn btn-sm <?php echo !empty($user_like_status[$post['id']]) ? 'btn-danger' : 'btn-outline-secondary'; ?> like-btn" data-post-id="<?php echo $post['id']; ?>">
+                            <button class="btn btn-sm like-btn <?php echo !empty($user_like_status[$post['id']]) ? 'btn-blue' : 'btn-outline-secondary'; ?>" data-post-id="<?php echo $post['id']; ?>">
                                 <i class="fas fa-thumbs-up me-1"></i> <?php echo !empty($user_like_status[$post['id']]) ? 'Liked' : 'Like'; ?> (<?php echo $post_like_counts[$post['id']] ?? 0; ?>)
                             </button>
                             <button class="btn btn-sm btn-outline-secondary comment-btn">
@@ -499,8 +552,13 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <div class="comments-section">
                             <!-- Form tambah komentar -->
                             <form action="" method="post" enctype="multipart/form-data" class="d-flex mb-2 align-items-center comment-form">
+                                <?php
+                                $comment_form_photo = (!empty($_SESSION['user']['photo']) && $_SESSION['user']['photo'] !== 'default.svg' && file_exists("img/uploads/" . $_SESSION['user']['photo']))
+                                    ? "img/uploads/" . $_SESSION['user']['photo']
+                                    : "img/default.svg";
+                                ?>
                                 <img class="rounded-circle me-2" 
-                                     src="img/<?php echo $_SESSION['user']['photo'] ?>" 
+                                     src="<?php echo $comment_form_photo ?>" 
                                      width="32" 
                                      alt="<?php echo $_SESSION['user']['name'] ?>">
                                 <div class="flex-grow-1 me-2">
@@ -525,7 +583,9 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <!-- Daftar komentar -->
                             <?php foreach($comments as $comment): ?>
                                <?php
-                                $comment_user_photo = (!empty($comment['photo_user']) && file_exists("img/" . $comment['photo_user'])) ? "img/" . $comment['photo_user'] : "img/default.svg";
+                                $comment_user_photo = (!empty($comment['photo_user']) && $comment['photo_user'] !== 'default.svg' && file_exists("img/uploads/" . $comment['photo_user']))
+                                    ? "img/uploads/" . $comment['photo_user']
+                                    : "img/default.svg";
                                 ?>
                                 <div class="d-flex mb-2 align-items-start">
                                     <a href="profilevisit.php?id=<?php echo $comment['user_id']; ?>">
@@ -535,16 +595,14 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                              alt="<?php echo $comment['name'] ?>">
                                     </a>
                                     <div class="flex-grow-1">
-                                        <div>
-                                            <strong>
+                                        <div class="bg-light p-2 rounded position-relative mt-1">
+                                            <span class="comment-author">
                                                 <a href="profilevisit.php?id=<?php echo $comment['user_id']; ?>" class="text-decoration-none text-dark">
                                                     <?php echo $comment['name']; ?>
                                                 </a>
-                                            </strong>
-                                        </div>
-                                        <div class="bg-light p-2 rounded position-relative mt-1">
+                                            </span>
                                             <div class="comment-content" id="comment-content-<?php echo $comment['id']; ?>">
-                                                <p class="mb-1"><?php echo nl2br(htmlspecialchars($comment['content'])); ?></p>
+                                                <span><?php echo nl2br(htmlspecialchars($comment['content'])); ?></span>
                                             </div>
                                             <!-- Form edit inline, awalnya hidden -->
                                             <form method="post" class="d-none mt-2" id="edit-form-<?php echo $comment['id']; ?>">
@@ -698,10 +756,10 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     if (data && typeof data.like_count !== 'undefined') {
                         if (data.status === 'liked') {
                             btn.classList.remove('btn-outline-secondary');
-                            btn.classList.add('btn-danger');
+                            btn.classList.add('btn-blue');
                             btn.innerHTML = '<i class="fas fa-thumbs-up me-1"></i> Liked (' + data.like_count + ')';
                         } else {
-                            btn.classList.remove('btn-danger');
+                            btn.classList.remove('btn-blue');
                             btn.classList.add('btn-outline-secondary');
                             btn.innerHTML = '<i class="fas fa-thumbs-up me-1"></i> Like (' + data.like_count + ')';
                         }

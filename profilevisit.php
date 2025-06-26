@@ -56,6 +56,15 @@ if(isset($_POST['unfollow'])) {
 $stmt = $db->prepare("SELECT * FROM portfolios WHERE user_id = ? ORDER BY created_at DESC");
 $stmt->execute([$profile_id]);
 $portfolios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Ambil teman (saling follow/accepted)
+$stmt = $db->prepare("SELECT u.id, u.name, u.photo FROM users u
+    INNER JOIN followers f1 ON f1.user_id = u.id AND f1.follower_id = ?
+    INNER JOIN followers f2 ON f2.user_id = ? AND f2.follower_id = u.id
+    WHERE f1.status='accepted' AND f2.status='accepted' AND u.id != ?");
+$stmt->execute([$profile_id, $profile_id, $profile_id]);
+$friends_preview = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$total_friends = count($friends_preview);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -91,40 +100,74 @@ $portfolios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 height: 90px;
             }
         }
+        .like-btn.btn-blue,
+        .like-btn.btn-blue:focus,
+        .like-btn.btn-blue:active {
+            background: #e7f1ff !important;
+            color: #0d6efd !important;
+            border-color: #0d6efd !important;
+        }
+        .like-btn.btn-outline-secondary:hover,
+        .like-btn.btn-outline-secondary:focus {
+            color: #0d6efd !important;
+            background: #e7f1ff !important;
+            border-color: #0d6efd !important;
+        }
+        .avatar-stack {
+            display: flex;
+            position: relative;
+            height: 32px;
+            min-width: 60px;
+        }
+        .avatar-stack .avatar-img {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            object-fit: cover;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            box-shadow: 0 0 3px rgba(0,0,0,0.2);
+            transition: z-index 0.2s;
+        }
+        .avatar-stack .avatar-img:hover {
+            z-index: 10;
+        }
     </style>
 </head>
 <body>
 <!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm mb-4">
     <div class="container">
         <a class="navbar-brand d-flex align-items-center" href="#">
-            <img src="assets/logouniport.png" alt="Logo Uniport" style="height:32px; margin-right:10px;">
-            <span style="font-weight:700; font-size:1.3rem; color:#70757B;">Uniport</span>
+            <img src="assets/logouniport.png" alt="Logo Uniport" style="height:38px; margin-right:10px;">
+            <span style="font-weight:700; font-size:1.8rem; color:#70757B;">UniPort</span>
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav ms-auto align-items-center" style="gap: 18px;">
+            <form class="mx-auto" style="width:320px;max-width:100%;" action="search.php" method="get" role="search">
+                <div class="input-group">
+                    <input class="form-control form-control-sm text-center" type="search" name="q" placeholder="Search" aria-label="Search" style="min-width:0;">
+                    <button class="btn btn-outline-primary btn-sm" type="submit">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </form>
+            <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
-                    <a class="nav-link fw-semibold <?php if(basename($_SERVER['PHP_SELF'])=='timeline.php') echo 'active'; ?>" href="timeline.php">
+                    <a class="nav-link <?php echo (basename($_SERVER['PHP_SELF'])=='timeline.php') ? 'active text-danger fw-bold' : ''; ?>" href="timeline.php">
                         <i class="fas fa-home me-1"></i> Home
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link fw-semibold <?php if(basename($_SERVER['PHP_SELF'])=='notifikasi.php') echo 'active'; ?>" href="notifikasi.php">
-                        <i class="fas fa-bell me-1"></i> Notifications
-                    </a>
+                    <a class="nav-link" href="#"><i class="fas fa-bell me-1"></i> Notifications</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link fw-semibold <?php if(basename($_SERVER['PHP_SELF'])=='messages.php') echo 'active'; ?>" href="messages.php">
-                        <i class="fas fa-envelope me-1"></i> Messages
-                    </a>
+                    <a class="nav-link" href="#"><i class="fas fa-envelope me-1"></i> Messages</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link fw-semibold text-danger" href="logout.php">
-                        <i class="fas fa-sign-out-alt me-1"></i> Logout
-                    </a>
+                    <a class="nav-link text-danger" href="logout.php"><i class="fas fa-sign-out-alt me-1"></i> Logout</a>
                 </li>
             </ul>
         </div>
@@ -137,6 +180,11 @@ $portfolios = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <?php
         $photo_file = !empty($user['photo']) ? "img/" . $user['photo'] : "uploads/default.svg";
         if(!file_exists($photo_file)) $photo_file = "uploads/default.svg";
+        if (!empty($user['photo']) && $user['photo'] !== 'default.svg' && file_exists("img/uploads/" . $user['photo'])) {
+            $photo_file = "img/uploads/" . $user['photo'];
+        } else {
+            $photo_file = "img/default.svg";
+        }
         ?>
         <img src="<?php echo $photo_file ?>" class="profile-avatar mb-2" alt="Foto Profil">
         <h3 class="fw-bold mb-0"><?php echo htmlspecialchars($user['name']); ?></h3>
@@ -193,7 +241,52 @@ $portfolios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <?php endif; ?>
             <?php endif; ?>
         </div>
+
+        <!-- Stack avatar + deskripsi teman -->
+        <?php if ($total_friends > 0): ?>
+        <div class="d-flex flex-column align-items-center mt-3">
+            <div class="avatar-stack position-relative mb-2" style="width: 80px;">
+                <?php foreach(array_slice($friends_preview, 0, 3) as $index => $friend): ?>
+                    <?php
+                        $friend_photo = (!empty($friend['photo']) && $friend['photo'] !== 'default.svg' && file_exists("img/uploads/" . $friend['photo']))
+                            ? "img/uploads/" . $friend['photo']
+                            : "img/default.svg";
+                    ?>
+                    <a href="profilevisit.php?id=<?php echo $friend['id']; ?>">
+                        <img src="<?php echo $friend_photo; ?>" 
+                             class="rounded-circle avatar-img"
+                             style="left: <?php echo $index * 20; ?>px;"
+                             alt="<?php echo htmlspecialchars($friend['name']); ?>">
+                    </a>
+                <?php endforeach; ?>
+            </div>
+            <div class="text-muted small text-center">
+                Berteman dengan 
+                <strong>
+                    <?php
+                        $names = array_column($friends_preview, 'name');
+                        $ids = array_column($friends_preview, 'id');
+                        $display = [];
+                        for ($i = 0; $i < min(2, count($names)); $i++) {
+                            $display[] = '<a href="profilevisit.php?id=' . $ids[$i] . '" class="text-decoration-none">' . htmlspecialchars($names[$i]) . '</a>';
+                        }
+                        echo implode(', ', $display);
+                        if ($total_friends > 3) {
+                            $others = $total_friends - 3;
+                            echo ', dan <a href="friends.php?id=' . $profile_id . '" class="text-decoration-none">' . $others . ' lainnya</a>';
+                        } elseif (isset($names[2])) {
+                            echo ', dan <a href="profilevisit.php?id=' . $ids[2] . '" class="text-decoration-none">' . htmlspecialchars($names[2]) . '</a>';
+                        }
+                    ?>
+                </strong>
+            </div>
+        </div>
+        <?php else: ?>
+            <div class="text-muted small mt-3 text-center">Belum memiliki teman</div>
+        <?php endif; ?>
     </div>
+    <!-- Friends Preview -->
+    
 
     <!-- Tabs -->
     <ul class="nav nav-tabs justify-content-center mb-3" id="profileTab" role="tablist">
@@ -240,17 +333,20 @@ $portfolios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <div class="d-flex align-items-center">
                                 <?php
-                                $user_photo = !empty($user['photo']) ? "img/" . $user['photo'] : "uploads/default.svg";
-                                if(!file_exists($user_photo)) $user_photo = "uploads/default.svg";
+                                $user_photo = (!empty($post['user_photo']) && $post['user_photo'] !== 'default.svg' && file_exists("img/uploads/" . $post['user_photo']))
+                                    ? "img/uploads/" . $post['user_photo']
+                                    : "img/default.svg";
                                 ?>
-                                <a href="profilevisit.php?id=<?php echo $user['id']; ?>">
+                                <a href="profilevisit.php?id=<?php echo $post['user_id']; ?>">
                                     <img class="rounded-circle me-2"
                                          src="<?php echo $user_photo ?>"
                                          width="40"
-                                         alt="<?php echo htmlspecialchars($user['name']) ?>">
+                                         height="40"
+                                         style="object-fit:cover;aspect-ratio:1/1;"
+                                         alt="<?php echo htmlspecialchars($post['name']) ?>">
                                 </a>
                                 <div>
-                                    <a href="profilevisit.php?id=<?php echo $user['id']; ?>" class="text-decoration-none text-dark">
+                                    <a href="profilevisit.php?id=<?php echo $post['user_id']; ?>" class="text-decoration-none text-dark">
                                         <h6 class="mb-0"><?php echo $user['name'] ?></h6>
                                     </a>
                                     <small class="text-muted"><?php echo date('F j, Y \a\t g:i a', strtotime($post['created_at'])) ?></small>
@@ -311,7 +407,7 @@ $portfolios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         ?>
                         <!-- Post Actions -->
                         <div class="d-flex justify-content-between border-top border-bottom py-2 mb-3">
-                            <button class="btn btn-sm <?php echo $user_liked ? 'btn-danger' : 'btn-outline-secondary'; ?> like-btn" data-post-id="<?php echo $post['id']; ?>">
+                            <button class="btn btn-sm like-btn <?php echo $user_liked ? 'btn-blue' : 'btn-outline-secondary'; ?>" data-post-id="<?php echo $post['id']; ?>">
                                 <i class="fas fa-thumbs-up me-1"></i> <?php echo $user_liked ? 'Liked' : 'Like'; ?> (<?php echo $like_count; ?>)
                             </button>
                             <button class="btn btn-sm btn-outline-secondary comment-btn">
@@ -326,14 +422,15 @@ $portfolios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <!-- Form tambah komentar -->
                             <form action="" method="post" enctype="multipart/form-data" class="d-flex mb-2 align-items-center comment-form">
                                 <?php
-                                $mini_photo_path = "img/" . $_SESSION['user']['photo'];
-                                if(empty($_SESSION['user']['photo']) || !file_exists($mini_photo_path)) {
-                                    $mini_photo_path = "uploads/default.svg";
-                                }
+                                $mini_photo_path = (!empty($_SESSION['user']['photo']) && $_SESSION['user']['photo'] !== 'default.svg' && file_exists("img/uploads/" . $_SESSION['user']['photo']))
+                                    ? "img/uploads/" . $_SESSION['user']['photo']
+                                    : "img/default.svg";
                                 ?>
-                                <img class="rounded-circle me-2" 
-                                     src="<?php echo $mini_photo_path ?>" 
-                                     width="32" 
+                                <img class="rounded-circle me-2"
+                                     src="<?php echo $mini_photo_path ?>"
+                                     width="32"
+                                     height="32"
+                                     style="object-fit:cover;aspect-ratio:1/1;"
                                      alt="<?php echo $_SESSION['user']['name'] ?>">
                                 <div class="flex-grow-1 me-2">
                                     <input type="hidden" name="comment_post_id" value="<?php echo $post['id']; ?>">
@@ -356,35 +453,45 @@ $portfolios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <!-- Daftar komentar -->
                             <?php foreach($comments as $comment): ?>
                                 <?php
-                                $comment_user_photo = "img/" . $comment['photo_user'];
-                                if(empty($comment['photo_user']) || !file_exists($comment_user_photo)) {
-                                    $comment_user_photo = "uploads/default.svg";
-                                }
+                                $comment_user_photo = (!empty($comment['photo_user']) && $comment['photo_user'] !== 'default.svg' && file_exists("img/uploads/" . $comment['photo_user']))
+                                    ? "img/uploads/" . $comment['photo_user']
+                                    : "img/default.svg";
                                 ?>
                                 <div class="d-flex mb-2 align-items-start">
                                     <a href="profilevisit.php?id=<?php echo $comment['user_id']; ?>">
                                         <img class="rounded-circle me-2"
                                              src="<?php echo $comment_user_photo ?>"
                                              width="32"
+                                             height="32"
+                                             style="object-fit:cover;aspect-ratio:1/1;"
                                              alt="<?php echo $comment['name'] ?>">
                                     </a>
                                     <div class="flex-grow-1">
-                                        <div>
-                                            <strong>
+                                        <div class="bg-light p-2 rounded position-relative mt-1">
+                                            <span class="comment-author">
                                                 <a href="profilevisit.php?id=<?php echo $comment['user_id']; ?>" class="text-decoration-none text-dark">
                                                     <?php echo $comment['name']; ?>
                                                 </a>
-                                            </strong>
-                                        </div>
-                                        <div class="bg-light p-2 rounded position-relative mt-1">
+                                            </span>
                                             <div class="comment-content" id="comment-content-<?php echo $comment['id']; ?>">
-                                                <p class="mb-1"><?php echo nl2br(htmlspecialchars($comment['content'])); ?></p>
+                                                <span><?php echo nl2br(htmlspecialchars($comment['content'])); ?></span>
                                             </div>
+                                            <!-- Form edit inline, awalnya hidden -->
+                                            <form method="post" class="d-none mt-2" id="edit-form-<?php echo $comment['id']; ?>">
+                                                <input type="hidden" name="edit_comment_id" value="<?php echo $comment['id']; ?>">
+                                                <div class="input-group input-group-sm">
+                                                    <input type="text" name="edit_comment_content" class="form-control" value="<?php echo htmlspecialchars($comment['content']); ?>" required>
+                                                    <button type="submit" name="update_comment" class="btn btn-primary btn-sm">Simpan</button>
+                                                    <button type="button" class="btn btn-secondary btn-sm cancel-edit-btn" data-comment-id="<?php echo $comment['id']; ?>">Batal</button>
+                                                </div>
+                                            </form>
                                             <?php if(!empty($comment['photo'])): ?>
                                                 <?php
                                                 $comment_photo_path = "img/comments/" . $comment['photo'];
                                                 if (file_exists($comment_photo_path)) {
-                                                    echo '<img src="' . $comment_photo_path . '" class="img-thumbnail shadow comment-img" style="max-width:120px;max-height:120px;cursor:pointer;"><br>';
+                                                    echo '<img src="' . $comment_photo_path . '" 
+                                                         class="img-thumbnail shadow comment-img mt-2" 
+                                                         style="max-width:120px;max-height:120px;cursor:pointer;">';
                                                 }
                                                 ?>
                                             <?php endif; ?>
@@ -455,7 +562,7 @@ $portfolios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             <div class="row">
             <?php foreach ($portfolios as $port): ?>
-                <div class="col-md-6">
+                <div class="col-md-6" id="portfolio-port<?php echo $port['id']; ?>">
                     <div class="card mb-3 shadow-sm">
                         <div class="card-body">
                             <h5 class="card-title mb-1"><?php echo htmlspecialchars($port['title']); ?></h5>
@@ -510,10 +617,117 @@ $portfolios = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </ul>
         </div>
     </div>
+
+    <!-- Stack avatar + deskripsi teman -->
+</div>
+<!-- Modal Zoom Gambar -->
+<div class="modal fade" id="imgZoomModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content bg-transparent border-0">
+      <div class="modal-body p-0 text-center">
+        <img id="zoomedImg" src="" style="max-width:90vw;max-height:80vh;box-shadow:0 0 20px #000;border-radius:12px;">
+        <!-- Overlay info like & komen akan ditambahkan lewat JS -->
+      </div>
+    </div>
+  </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <!-- Font Awesome untuk ikon -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+<script>
+document.querySelectorAll('.like-btn').forEach(button => {
+    button.addEventListener('click', function() {
+        const btn = this;
+        const postId = btn.getAttribute('data-post-id');
+        btn.disabled = true;
+
+        fetch('like.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'post_id=' + encodeURIComponent(postId)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data && typeof data.like_count !== 'undefined') {
+                if (data.status === 'liked') {
+                    btn.classList.remove('btn-outline-secondary');
+                    btn.classList.add('btn-blue');
+                    btn.innerHTML = '<i class="fas fa-thumbs-up me-1"></i> Liked (' + data.like_count + ')';
+                } else {
+                    btn.classList.remove('btn-blue');
+                    btn.classList.add('btn-outline-secondary');
+                    btn.innerHTML = '<i class="fas fa-thumbs-up me-1"></i> Like (' + data.like_count + ')';
+                }
+            }
+        })
+        .finally(() => {
+            btn.disabled = false;
+        });
+    });
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Zoom gambar komentar
+    document.querySelectorAll('.comment-img').forEach(img => {
+        img.addEventListener('click', function() {
+            document.getElementById('zoomedImg').src = this.src;
+            // Hapus overlay info jika ada
+            let overlay = document.getElementById('zoomedImgOverlay');
+            if (overlay) overlay.remove();
+            var modal = new bootstrap.Modal(document.getElementById('imgZoomModal'));
+            modal.show();
+        });
+    });
+
+    // Zoom gambar post
+    document.querySelectorAll('.post-img-zoom').forEach(img => {
+        img.addEventListener('click', function() {
+            const src = this.src;
+            const postCard = this.closest('.post-card');
+            const likeCount = postCard.querySelector('.like-count')?.textContent || '0';
+            const commentCount = postCard.querySelector('.comment-count')?.textContent || '0';
+
+            const zoomedImg = document.getElementById('zoomedImg');
+            zoomedImg.src = src;
+
+            // Tambahkan info like & komen di bawah gambar pada modal
+            let overlay = document.getElementById('zoomedImgOverlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'zoomedImgOverlay';
+                overlay.style = 'margin-top:12px;display:flex;justify-content:center;gap:32px;font-size:1.2rem;';
+                zoomedImg.parentNode.appendChild(overlay);
+            }
+            overlay.innerHTML = `
+                <span><i class="fas fa-thumbs-up me-1"></i> <span class="like-count">${likeCount}</span></span>
+                <span><i class="fas fa-comment me-1"></i> <span class="comment-count">${commentCount}</span></span>
+            `;
+
+            var modal = new bootstrap.Modal(document.getElementById('imgZoomModal'));
+            modal.show();
+        });
+    });
+
+    // Highlight dan scroll ke portofolio jika ada ID di localStorage
+    const highlightId = localStorage.getItem('highlightPortfolioId');
+    if (highlightId) {
+        // Aktifkan tab portofolio
+        var tab = document.querySelector('button[data-bs-target="#portfolio"]');
+        if (tab) tab.click();
+
+        // Setelah tab aktif, scroll ke portofolio
+        setTimeout(function() {
+            const el = document.getElementById('portfolio-port' + highlightId);
+            if (el) {
+                el.classList.add('border', 'border-primary', 'shadow');
+                el.scrollIntoView({behavior: 'smooth', block: 'center'});
+                setTimeout(() => el.classList.remove('border', 'border-primary', 'shadow'), 2000);
+            }
+            localStorage.removeItem('highlightPortfolioId');
+        }, 400);
+    }
+});
+</script>
 </body>
 </html><?php
 if (isset($_GET['delete_portofolio']) && $_SESSION['user']['id'] == $profile_id) {

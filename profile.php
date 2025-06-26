@@ -7,7 +7,7 @@ $profile_user_id = isset($_GET['id']) ? (int)$_GET['id'] : $_SESSION['user']['id
 
 // Proses upload foto profil
 if(isset($_POST['update_photo'])) {
-    $target_dir = "img/";
+    $target_dir = "img/uploads/";
     $filename = time() . '_' . basename($_FILES["photo"]["name"]);
     $target_file = $target_dir . $filename;
 
@@ -94,8 +94,11 @@ $following_count = $stmt->fetchColumn();
         <div class="card mb-4">
             <div class="card-body text-center">
                 <?php
-                $photo_file = !empty($_SESSION['user']['photo']) ? "img/" . $_SESSION['user']['photo'] : "img/default.png";
-                if(!file_exists($photo_file)) $photo_file = "img/default.png";
+                if (!empty($profile_user['photo']) && $profile_user['photo'] !== 'default.svg' && file_exists("img/uploads/" . $profile_user['photo'])) {
+                    $photo_file = "img/uploads/" . $profile_user['photo'];
+                } else {
+                    $photo_file = "img/default.svg";
+                }
                 ?>
                 <img src="<?php echo $photo_file ?>" width="120" class="rounded-circle mb-2"><br>
                 <h3 class="mb-1"><?php echo htmlspecialchars($profile_user['name']); ?></h3>
