@@ -1,9 +1,9 @@
 <?php
 
-$db_host = "localhost";
-$db_user = "root";
-$db_pass = "";
-$db_name = "uniport";
+$db_host = 'localhost';
+$db_user = 'uniport'; // sesuai yang kamu buat
+$db_pass = 'uniport123';
+$db_name = 'uniport';
 
 try {    
     //create PDO connection 
