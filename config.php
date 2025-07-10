@@ -1,7 +1,7 @@
 <?php
 
 $db_host = 'localhost';
-$db_user = 'uniport'; // sesuai yang kamu buat
+$db_user = 'root'; // sesuai yang kamu buat
 $db_pass = '';
 $db_name = 'uniport';
 
