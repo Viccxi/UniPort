@@ -161,10 +161,10 @@ $total_friends = count($friends_preview);
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#"><i class="fas fa-bell me-1"></i> Notifications</a>
+                    <a class="nav-link" href="notifications.php"><i class="fas fa-bell me-1"></i> Notifications</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#"><i class="fas fa-envelope me-1"></i> Messages</a>
+                    <a class="nav-link" href="messages.php"><i class="fas fa-envelope me-1"></i> Messages</a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link text-danger" href="logout.php"><i class="fas fa-sign-out-alt me-1"></i> Logout</a>

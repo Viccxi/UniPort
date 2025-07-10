@@ -79,14 +79,35 @@ if(isset($_POST['create_comment'])) {
     }
 
     try {
+        // Simpan komentar
         $stmt = $db->prepare("INSERT INTO comments (post_id, user_id, content, photo) VALUES (?, ?, ?, ?)");
         $stmt->execute([$comment_post_id, $comment_user_id, $comment_content, $comment_photo]);
+        $comment_id = $db->lastInsertId();
+
+        // Ambil pemilik post
+        $stmt = $db->prepare("SELECT user_id FROM posts WHERE id = ?");
+        $stmt->execute([$comment_post_id]);
+        $post_owner_id = $stmt->fetchColumn();
+
+        // Cek apakah komentator adalah follower dari pemilik post
+        $stmt = $db->prepare("SELECT COUNT(*) FROM followers WHERE user_id = ? AND follower_id = ? AND status = 'accepted'");
+        $stmt->execute([$post_owner_id, $comment_user_id]);
+        $is_follower = $stmt->fetchColumn();
+
+if ($post_owner_id != $comment_user_id) {
+    // Simpan notifikasi
+    $stmt = $db->prepare("INSERT INTO notifications (user_id, from_user_id, post_id, comment_id, type, is_read, created_at) VALUES (?, ?, ?, ?, 'comment', 0, NOW())");
+    $stmt->execute([$post_owner_id, $comment_user_id, $comment_post_id, $comment_id]);
+}
+
+
         header("Location: " . $_SERVER['REQUEST_URI']);
         exit;
     } catch(PDOException $e) {
         die("Error: " . $e->getMessage());
     }
 }
+
 
 // Handle update comment
 if(isset($_POST['update_comment'])) {
@@ -116,6 +137,45 @@ if(isset($_GET['delete_comment'])) {
         die("Error: " . $e->getMessage());
     }
 }
+
+// Handle like post
+if(isset($_POST['like_post'])) {
+    $post_id = $_POST['post_id'];
+    $user_id = $_SESSION['user']['id'];
+
+    try {
+        // Cek apakah sudah like
+        $stmt = $db->prepare("SELECT COUNT(*) FROM likes WHERE user_id = ? AND post_id = ?");
+        $stmt->execute([$user_id, $post_id]);
+        $hasLiked = $stmt->fetchColumn();
+
+        if (!$hasLiked) {
+            // Simpan like
+            $stmt = $db->prepare("INSERT INTO likes (user_id, post_id) VALUES (?, ?)");
+            $stmt->execute([$user_id, $post_id]);
+
+            // Ambil pemilik post
+            $stmt = $db->prepare("SELECT user_id FROM posts WHERE id = ?");
+            $stmt->execute([$post_id]);
+            $post_owner_id = $stmt->fetchColumn();
+
+            // Jangan kirim notifikasi ke diri sendiri
+            if ($post_owner_id != $user_id) {
+                // Simpan notifikasi
+                $stmt = $db->prepare("INSERT INTO notifications (user_id, from_user_id, post_id, comment_id, type, is_read, created_at)
+                                      VALUES (?, ?, ?, NULL, 'like', 0, NOW())");
+                $stmt->execute([$post_owner_id, $user_id, $post_id]);
+            }
+        }
+
+        header("Location: " . $_SERVER['REQUEST_URI']);
+        exit;
+
+    } catch(PDOException $e) {
+        die("Error: " . $e->getMessage());
+    }
+}
+
 
 // Get all posts
 try {
@@ -177,7 +237,7 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Pesbuk - Social Media Platform</title>
+    <title>UniPort</title>
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -339,10 +399,10 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#"><i class="fas fa-bell me-1"></i> Notifications</a>
+                        <a class="nav-link" href="notifications.php"><i class="fas fa-bell me-1"></i> Notifications</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#"><i class="fas fa-envelope me-1"></i> Messages</a>
+                        <a class="nav-link" href="messages.php"><i class="fas fa-envelope me-1"></i> Messages</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link text-danger" href="logout.php"><i class="fas fa-sign-out-alt me-1"></i> Logout</a>
@@ -547,6 +607,7 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <button class="btn btn-sm btn-outline-secondary comment-btn">
                                 <i class="fas fa-comment me-1"></i> Comment (<?php echo $post_comment_counts[$post['id']] ?? 0; ?>)
                             </button>
+
                         </div>
                         <!-- Comments Section -->
                         <div class="comments-section">
@@ -677,6 +738,7 @@ $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <label for="editPostContent" class="form-label">Content</label>
                             <textarea class="form-control" id="editPostContent" name="content" rows="3" required></textarea>
                         </div>
+
                         <div class="mb-3">
                             <label for="photoInput" class="form-label">Upload Photo</label>
                             <input type="file" name="photo" accept="image/*" id="photoInput" class="form-control">

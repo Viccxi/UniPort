@@ -60,7 +60,7 @@ if(isset($_POST['login'])){
 
             <div class="form-group">
                 <label for="username">Username</label>
-                <input class="form-control" type="text" name="username" placeholder="Username atau email" />
+                <input class="form-control" type="text" name="username" placeholder="Username" />
             </div>
 
 
